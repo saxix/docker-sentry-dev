@@ -1,42 +1,68 @@
-DATADIR?=/data/devpi_index
-BACKUP?=/data/BACKUP
-USER=saxix
-IMAGE=sentry-localdev
+CMD?=
+VERSION=9
+DOCKER_IMAGE?=saxix/sentry-localdev
+DOCKERFILE?=Dockerfile
+BUILD_OPTIONS?=--compress --rm
+DEVELOP?="0"
+WORKERS?=1
+OPT?=
 
-.PHONY: upgrade
+help:
+	@echo 'Options:                                                       '
+	@echo '   options can be passed via environment variables             '
+	@echo '   TARGET:   package version and tag                           '
+	@echo '   DEVELOP:  1=Use local code - 0=feth release from github     '
+	@echo 'Usage:                                                         '
+	@echo '   make clean            removes images and containers         '
+	@echo '   make build            build container                       '
+	@echo '   make test             test container                        '
+	@echo '   make run              run container (only app)              '
+	@echo '   make shell                                                  '
+	@echo '   make push             push image to docker hub              '
+	@echo '                                                               '
 
 clean:
-	-@docker rmi ${USER}/${IMAGE}
+	docker rmi --force ${DOCKER_IMAGE}:${VERSION}
+
+dev:
+	DEVELOP=1 $(MAKE) build
 
 build:
-	docker build -t ${USER}/${IMAGE} --force-rm --rm  .
+	docker build ${BUILD_OPTIONS} \
+			-t ${DOCKER_IMAGE}:${VERSION} \
+			-f ${DOCKERFILE} .
+	@docker images | grep ${DOCKER_IMAGE}
 
-run: build
-	docker run --rm ${USER}/${IMAGE}
+.run:
+	cd .. && docker run \
+			-p 15000:15000 \
+			-p 9000:9000 \
+			-e SUPERVISOR_USER=${SUPERVISOR_USER} \
+			-e SUPERVISOR_PWD=${SUPERVISOR_PWD} \
+			-e SENTRY_ADMIN_USERNAME=admin \
+			-e SENTRY_ADMIN_PASSWORD=123 \
+			-e SENTRY_SECRET_KEY=Developmet-Sentry-Super-SecretKey \
+			-e SENTRY_REDIS_HOST=${REDIS_SERVER} \
+			-e SENTRY_DB_USER=${POSTGRES_USER} \
+			-e SENTRY_POSTGRES_HOST=${POSTGRES_HOST} \
+			-e SENTRY_DB_PASSWORD=${POSTGRES_PASSWORD} \
+			--rm \
+			${OPT} \
+			-v /data/storage/sentry/conf:/conf \
+			${DOCKER_IMAGE}:${VERSION} \
+			${CMD}
 
-bash:
-	docker run --rm ${USER}/${IMAGE}:`cat VERSION` /bin/bash
+run:
+	CMD=start $(MAKE) .run
+
+shell:
+	OPT='-it' CMD='/bin/bash' $(MAKE) .run
+
+push:
+	echo ${DOCKER_PWD} | docker login -u ${DOCKER_USER} --password-stdin
+	docker tag ${DOCKER_IMAGE}:${VERSION} ${DOCKER_IMAGE}:latest
+	docker push ${DOCKER_IMAGE}:${VERSION}
+	docker push ${DOCKER_IMAGE}:latest
 
 
-test: clean build
-	docker run -p 16379:6379 --rm ${USER}/${IMAGE}:`cat VERSION`
-
-
-tag: build
-	docker tag ${USER}/${IMAGE}:latest ${USER}/${IMAGE}:`cat VERSION`
-
-
-release: tag
-	docker push ${USER}/${IMAGE}:latest
-	docker push ${USER}/${IMAGE}:`cat VERSION`
-
-
-docker-cleanup:
-	@if [ -n "$(docker ps -a -q)" ];then docker rm $(docker ps -a -q) -f;fi
-	@# 1. Make sure that exited containers are deleted.
-	-@docker rm -v `docker ps -a -q -f status=exited` 2>/dev/null
-	@# 2. Remove unwanted ‘dangling’ images.
-	-@docker rmi `docker images -f "dangling=true" -q`  2>/dev/null
-	@# 3. Clean ‘vfs’ directory?
-	-@docker volume rm `docker volume ls -qf dangling=true`  2>/dev/null
-
+.PHONY: run
