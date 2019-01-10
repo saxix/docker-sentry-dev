@@ -31,7 +31,5 @@ RUN chmod +x /entrypoint.sh \
 EXPOSE 9000
 EXPOSE 15000
 
-USER sentry
-
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["start"]

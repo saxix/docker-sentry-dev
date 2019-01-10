@@ -1,5 +1,5 @@
 CMD?=
-VERSION=9
+VERSION=9-1
 DOCKER_IMAGE?=saxix/sentry-localdev
 DOCKERFILE?=Dockerfile
 BUILD_OPTIONS?=--compress --rm
@@ -58,7 +58,7 @@ run:
 shell:
 	OPT='-it' CMD='/bin/bash' $(MAKE) .run
 
-push:
+release:
 	echo ${DOCKER_PWD} | docker login -u ${DOCKER_USER} --password-stdin
 	docker tag ${DOCKER_IMAGE}:${VERSION} ${DOCKER_IMAGE}:latest
 	docker push ${DOCKER_IMAGE}:${VERSION}
